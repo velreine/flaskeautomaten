@@ -10,9 +10,9 @@ namespace Flaskeautomaten
     class Program
     {
 
-        private static Queue<string> _producerBuffer = new Queue<string>(200);
-        private static readonly Queue<string> SodaBuffer = new Queue<string>(200);
-        private static readonly Queue<string> BeerBuffer = new Queue<string>(200);
+        private static Queue<string> _producerBuffer = new Queue<string>(20);
+        private static readonly Queue<string> SodaBuffer = new Queue<string>(10);
+        private static readonly Queue<string> BeerBuffer = new Queue<string>(10);
         private static int sodanum = 0;
         private static int beernum = 0;
 
@@ -27,23 +27,33 @@ namespace Flaskeautomaten
 
                     lock (_producerBuffer)
                     {
-                        _producerBuffer.Enqueue($"soda {++sodanum}");
-                        _producerBuffer.Enqueue($"beer {++beernum}");
-                        Console.WriteLine("Putted a new soda and beer in the _producerBuffer");
 
-                        Monitor.PulseAll(_producerBuffer);
+                        if (_producerBuffer.Count < 20)
+                        {
+                            _producerBuffer.Enqueue($"soda {++sodanum}");
+                            _producerBuffer.Enqueue($"beer {++beernum}");
+                            Console.WriteLine("Putted a new soda and beer in the _producerBuffer");
+                            Monitor.PulseAll(_producerBuffer);
+                        }
+                        else
+                        {
+                            Console.WriteLine("Buffer is full. Waiting for a pulse from consumer Thread!");
+                            // Block producer until we have a pulse.
+                            Monitor.Wait(_producerBuffer);
+                        }
+
+
+
+
                     }
-                    
-                    Thread.Sleep(500);
+
+                    //Thread.Sleep(1000);
                 }
             });
 
 
             Thread consumerThread = new Thread(() =>
             {
-                // Start producer thread in consumer thread.
-
-
 
                 while (true)
                 {
@@ -54,38 +64,74 @@ namespace Flaskeautomaten
                         {
                             Console.WriteLine("Consumer Thread now waiting for a pulse from _producerBuffer.");
                             if (!producerThread.IsAlive) producerThread.Start();
+
+                            // Wait for the producer to produce.
                             Monitor.Wait(_producerBuffer);
-                            
+                        }
 
+                        // Empty the producer buffer.
+                        for (int i = 0; i < _producerBuffer.Count; i++)
+                        {
+                            var item = _producerBuffer.Dequeue();
 
-                            // When it is reacquired lets fill our soda & beer queue:
-                            while (_producerBuffer.Count != 0)
+                            if (item.Contains("soda"))
                             {
-                                var retrieved = _producerBuffer.Dequeue();
-                                //Console.WriteLine("retrieved: " + retrieved);
-
-
-                                if (retrieved.Contains("soda"))
+                                RefillSoda(new string[] { item });
+                                lock (SodaBuffer)
                                 {
-                                    //SodaBuffer.Enqueue(retrieved);
-                                    RefillSoda(new string[] { retrieved });
-                                    Console.WriteLine(SodaBuffer.Dequeue());
-                                }
-
-                                if (retrieved.Contains("beer"))
-                                {
-                                    //BeerBuffer.Enqueue(retrieved);
-                                    RefillBeer(new string[] { retrieved });
-                                    Console.WriteLine(BeerBuffer.Dequeue());
+                                    Console.WriteLine("Dequeued this item: " + SodaBuffer.Dequeue());
                                 }
 
                             }
 
+                            if (item.Contains("beer"))
+                            {
+                                RefillBeer(new string[] { item });
+                                lock (BeerBuffer)
+                                {
+                                    Console.WriteLine("Dequeued this item: " + BeerBuffer.Dequeue());
+                                }
+                            }
+
+                            // Notify the producer thread that it can start producing again.
+                            Monitor.PulseAll(_producerBuffer);
                         }
+
+
+
+
+                        #region a
+                        /*// When it is reacquired lets fill our soda & beer queue:
+                        while (_producerBuffer.Count != 0)
+                        {
+                            var retrieved = _producerBuffer.Dequeue();
+                            //Console.WriteLine("retrieved: " + retrieved);
+
+
+                            if (retrieved.Contains("soda"))
+                            {
+                                //SodaBuffer.Enqueue(retrieved);
+                                RefillSoda(new string[] { retrieved });
+                                Console.WriteLine("Dequeued this item: " + SodaBuffer.Dequeue());
+                            }
+
+                            if (retrieved.Contains("beer"))
+                            {
+                                //BeerBuffer.Enqueue(retrieved);
+                                RefillBeer(new string[] { retrieved });
+                                Console.WriteLine("Dequeued this item: " + BeerBuffer.Dequeue());
+                            }
+
+                        }*/
+                        #endregion
+
+
+
 
                     }
 
-
+                    // Slow down consumption.
+                    Thread.Sleep(6000);
                 }
 
 
@@ -94,7 +140,7 @@ namespace Flaskeautomaten
 
             // Consumer Thread needs to be executed first.
             consumerThread.Start();
-            //producerThread.Start();
+
 
             Console.ReadLine();
 
@@ -109,6 +155,7 @@ namespace Flaskeautomaten
             {
                 foreach (var soda in sodas)
                 {
+                    Console.WriteLine($"Added soda: {soda} to soda queue.");
                     SodaBuffer.Enqueue(soda);
                 }
 
@@ -122,6 +169,7 @@ namespace Flaskeautomaten
             {
                 foreach (var beer in beers)
                 {
+                    Console.WriteLine($"Added beer: {beer} to beer queue.");
                     BeerBuffer.Enqueue(beer);
                 }
 
