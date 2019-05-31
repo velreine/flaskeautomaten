@@ -10,11 +10,11 @@ namespace Flaskeautomaten
     class Program
     {
 
-        private static Queue<string> _producerBuffer = new Queue<string>(20);
-        private static readonly Queue<string> SodaBuffer = new Queue<string>(10);
-        private static readonly Queue<string> BeerBuffer = new Queue<string>(10);
-        private static int sodanum = 0;
-        private static int beernum = 0;
+        private static Queue<Beverage> _producerBuffer = new Queue<Beverage>(20);
+        private static readonly Queue<Beverage> SodaBuffer = new Queue<Beverage>(10);
+        private static readonly Queue<Beverage> BeerBuffer = new Queue<Beverage>(10);
+        private static int _sodaCount = 0;
+        private static int _beerCount = 0;
 
 
         static void Main(string[] args)
@@ -30,8 +30,9 @@ namespace Flaskeautomaten
 
                         if (_producerBuffer.Count < 20)
                         {
-                            _producerBuffer.Enqueue($"soda {++sodanum}");
-                            _producerBuffer.Enqueue($"beer {++beernum}");
+                            //_producerBuffer.Enqueue($"soda {++sodanum}");
+                            _producerBuffer.Enqueue(new Soda($"soda {++_sodaCount}"));
+                            _producerBuffer.Enqueue(new Beer($"beer {++_beerCount}"));
                             Console.WriteLine("Putted a new soda and beer in the _producerBuffer");
                             Monitor.PulseAll(_producerBuffer);
                         }
@@ -41,12 +42,7 @@ namespace Flaskeautomaten
                             // Block producer until we have a pulse.
                             Monitor.Wait(_producerBuffer);
                         }
-
-
-
-
                     }
-
                     //Thread.Sleep(1000);
                 }
             });
@@ -59,7 +55,6 @@ namespace Flaskeautomaten
                 {
                     lock (_producerBuffer)
                     {
-
                         while (_producerBuffer.Count == 0)
                         {
                             Console.WriteLine("Consumer Thread now waiting for a pulse from _producerBuffer.");
@@ -74,9 +69,9 @@ namespace Flaskeautomaten
                         {
                             var item = _producerBuffer.Dequeue();
 
-                            if (item.Contains("soda"))
+                            if (item.GetType() == typeof(Soda))
                             {
-                                RefillSoda(new string[] { item });
+                                RefillSoda(new[] { (Soda)item });
                                 lock (SodaBuffer)
                                 {
                                     Console.WriteLine("Dequeued this item: " + SodaBuffer.Dequeue());
@@ -84,9 +79,12 @@ namespace Flaskeautomaten
 
                             }
 
-                            if (item.Contains("beer"))
+                            if (item.GetType() == typeof(Beer))
                             {
-                                RefillBeer(new string[] { item });
+                                // Behøver ikke cast (kunne også have en Refill metode som tog en Beverage)
+                                // "jeg har omskrevet koden", 
+                                // Her kunne man refactor RefillBeer/Soda metoderne.
+                                RefillBeer(new[] { (Beer)item });
                                 lock (BeerBuffer)
                                 {
                                     Console.WriteLine("Dequeued this item: " + BeerBuffer.Dequeue());
@@ -149,7 +147,7 @@ namespace Flaskeautomaten
 
 
 
-        public static void RefillSoda(string[] sodas)
+        public static void RefillSoda(Soda[] sodas)
         {
             lock (SodaBuffer)
             {
@@ -163,7 +161,7 @@ namespace Flaskeautomaten
             }
         }
 
-        public static void RefillBeer(string[] beers)
+        public static void RefillBeer(Beer[] beers)
         {
             lock (BeerBuffer)
             {
@@ -180,7 +178,7 @@ namespace Flaskeautomaten
 
 
 
-        public string GetSoda()
+        public Soda GetSoda()
         {
             lock (SodaBuffer)
             {
@@ -190,13 +188,13 @@ namespace Flaskeautomaten
                     Monitor.Wait(SodaBuffer);
                 }
 
-                return SodaBuffer.Dequeue();
+                return (Soda)SodaBuffer.Dequeue();
 
 
             }
         }
 
-        public string GetBeer()
+        public Beer GetBeer()
         {
 
             lock (BeerBuffer)
@@ -206,7 +204,7 @@ namespace Flaskeautomaten
                     Monitor.Wait(BeerBuffer);
                 }
 
-                return BeerBuffer.Dequeue();
+                return (Beer)BeerBuffer.Dequeue();
             }
 
         }
